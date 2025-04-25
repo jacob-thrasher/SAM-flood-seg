@@ -22,7 +22,11 @@ def get_metrics(model, dataloader):
     running_dice = 0
     with torch.no_grad():
         for batch in dataloader:
+
+            # Configure inputs
             inputs = {k: v.to(device) for k, v in batch.items() if k != "ground_truth_mask"}
+
+            # Get masks
             outputs = model(**inputs, multimask_output=False)
             predicted_masks = outputs.pred_masks.squeeze(1)
 
@@ -37,16 +41,22 @@ def get_metrics(model, dataloader):
 root = '/home/WVU-AD/jdt0025/Documents/data/Flood'
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+# Load processor and model
+## Processor preprocesses images in the way that SAM expects them to be
 processor = SamProcessor.from_pretrained('facebook/sam-vit-base')
 model = SamModel.from_pretrained('facebook/sam-vit-base')
 
+
+# Define dataloaders
 train_dataset = FloodSeg(root, os.path.join(root, 'train.csv'), processor, region_select='point', k=1)
 test_dataset = FloodSeg(root, os.path.join(root, 'test.csv'), processor, region_select='point', k=1)
 train_dataloader = DataLoader(train_dataset, batch_size=2, shuffle=True)
 test_dataloader = DataLoader(test_dataset, batch_size=2, shuffle=False)
 
-# model.load_state_dict(torch.load('experiments/best_model_SAM_1.pth', weights_only=True))
+model.load_state_dict(torch.load('experiments/best_model_SAM_1.pth', weights_only=True))
 model.to('cuda')
+
 
 get_metrics(model, test_dataloader)
 
@@ -56,11 +66,14 @@ outputs = model(**inputs, multimask_output=False)
 pred = outputs.pred_masks.squeeze().detach().cpu()
 
 
+# Get segmentation mask for test imafge
 
+# Get test image and mask
 img = batch['pixel_values'][0].detach().cpu()
 mask = batch['ground_truth_mask'][0].detach().cpu()
 resize = T.Resize((256, 256))
 
+# Normalize image but I don't remember why lol
 A = img
 A -= A.min(1, keepdim=True)[0]
 A /= A.max(1, keepdim=True)[0]
@@ -68,7 +81,8 @@ img = resize(A)
 mask = resize(mask)
 
 
-
+# Convert unbounded predictions into probabilities (sigmoid)
+# Round probabilities to nearest value (0, 1)
 test = torch.round(F.sigmoid(pred[0]))
 print(test)
 
