@@ -6,6 +6,8 @@ import random
 import pandas as pd
 from torch.utils.data import Dataset
 from PIL import Image
+from tifffile import imread
+
 from scipy.ndimage import label
 
 def select_random_points_per_region(mask, connectivity=1, k=1):
@@ -114,3 +116,55 @@ class FloodSeg(Dataset):
         # inputs['resized_img'] = img
 
         return inputs
+
+class Sen1Flood11(Dataset):
+    def __init__(self, root, df, processor, region_select='bbox', k=1, transform=None):
+        self.root = root
+        self.df = df
+        self.images = os.listdir(os.path.join(root, 'S2Hand'))
+        self.masks = os.listdir(os.path.join(self.root, 'LabelHand'))
+
+        self.processor = processor
+        self.region_select = region_select
+        self.k = k
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        img_path = os.path.join(self.root, 'S2Hand', self.df.iloc[idx]['images'])
+        mask_path = os.path.join(self.root, 'LabelHand', self.df.iloc[idx]['masks'])
+
+        img_full = imread(img_path)
+        mask = imread(mask_path)
+
+        img_rgb = np.stack([
+            img_full[3],
+            img_full[2],
+            img_full[1],
+        ])
+
+        img_rgb = img_rgb / img_rgb.max()
+        mask = np.maximum(0, mask)
+
+        img = np.reshape(img_rgb, (256, 256))
+        mask = np.reshape(mask, (256, 256))
+
+        if self.region_select == 'bbox':
+            bbox = get_bounding_box(mask)
+            inputs = self.processor(img, input_boxes=[[bbox]], return_tensors='pt')
+        elif self.region_select == 'point':
+            points = get_random_point(mask, self.k)
+            inputs = self.processor(img, input_points=[points], return_tensors='pt')
+        elif self.region_select == 'each':
+            points = select_random_points_per_region(mask, connectivity=1)
+            inputs = self.processor(img, input_points=[points], return_tensors='pt')
+
+        # if self.transform:
+        #     img = self.transform(img)
+        #     mask = self.transform(mask)
+
+        inputs = {k: v.squeeze(0) for k, v in inputs.items()}
+        inputs['ground_truth_mask'] = mask
+        return img_rgb, mask

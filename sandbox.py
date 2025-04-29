@@ -5,28 +5,30 @@ from tqdm import tqdm
 from PIL import Image
 from random import shuffle
 from segment_anything import SamPredictor, sam_model_registry
-from data import FloodSeg
+from data import FloodSeg, Sen1Flood11
 from transformers import SamProcessor, SamModel
 import matplotlib.pyplot as plt
 from matplotlib import patches
 import pandas as pd
 
 
+root = '/home/WVU-AD/jdt0025/Documents/data/v1.1/data/flood_events/HandLabeled'
 
-root = '/home/WVU-AD/jdt0025/Documents/data/Flood'
-df = pd.read_csv(os.path.join(root, 'metadata.csv'))
 
-train = df.sample(frac=0.8)
-test = df[~df.index.isin(train.index)]
+# dataset = Sen1Flood11(root)
+# img, mask = dataset[4]
 
-print(train.head())
-print(test.head())  
+# print(img.shape)
+# print(mask.shape)
 
-print(set(train['Image'].tolist()).intersection(set(test['Image'].tolist())))
 
-train.to_csv(os.path.join(root, 'train.csv'))
-test.to_csv(os.path.join(root, 'test.csv'))
 
+# fig, ax = plt.subplots(nrows=1, ncols=2)
+
+# img = torch.tensor(img)
+# ax[0].imshow(img.permute(1, 2, 0))
+# ax[1].imshow(mask, alpha=1)
+# plt.show()
 
 
 # device = 'cuda' if torch.cuda.is_available() else 'cpu'
