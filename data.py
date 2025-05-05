@@ -162,13 +162,13 @@ class WVFlood(Dataset):
         return len(self.folders)
     
     def __getitem__(self, idx):
-        folder_name = self.folders(idx)
+        folder_name = self.folders[idx]
 
         img = Image.open(os.path.join(self.root, folder_name, 'img.png')).convert('RGB')
         mask = Image.open(os.path.join(self.root, folder_name, 'label.png')).convert('L')
 
         img = img.resize((256, 256))
-        mask = np.array(mask.resize((256, 256)), dtype=np.float32) // 255
+        mask = np.array(mask.resize((256, 256)), dtype=np.float32) // 38
 
         if self.region_select == 'bbox':
             bbox = get_bounding_box(mask)
@@ -213,17 +213,17 @@ class Sen1Flood11(Dataset):
         mask = imread(mask_path)
 
         img_rgb = np.stack([
-            img_full[3],
-            img_full[2],
-            img_full[1],
+            (img_full[3] - img_full[3].min()) / (img_full[3].max() - img_full[3].min()),
+            (img_full[2] - img_full[2].min()) / (img_full[2].max() - img_full[2].min()),
+            (img_full[1] - img_full[1].min()) / (img_full[1].max() - img_full[1].min()),
         ])
 
-        img_rgb = (img_rgb - img_rgb.min()) / (img_rgb.max() - img_rgb.min())
+        # img_rgb = (img_rgb - img_rgb.min()) / (img_rgb.max() - img_rgb.min())
         mask = np.maximum(0, mask)
 
         img = transforms.functional.resize(torch.tensor(img_rgb), [256, 256]) 
-        mask = transforms.functional.resize(torch.tensor(mask).unsqueeze(0), [256, 256]).squeeze()
-
+        mask = transforms.functional.resize(torch.tensor(mask, dtype=torch.float32).unsqueeze(0), [256, 256]).squeeze()
+        mask = torch.ceil(mask)
         # img = np.resize(img_rgb, (3, 256, 256))
         # mask = np.resize(mask, (256, 256))
 
