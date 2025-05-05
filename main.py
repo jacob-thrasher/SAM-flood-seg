@@ -11,22 +11,56 @@ from statistics import mean
 from tqdm import tqdm
 import torch.nn.functional as F
 import monai
-from data import FloodSeg
+import argparse
+import random
+from data import FloodSeg, Sen1Flood11
 
 
 
-root = '/home/WVU-AD/jdt0025/Documents/data/Flood'
+parser = argparse.ArgumentParser()
+parser.add_argument("--seed", type=int, default=69, required=False, help="seed")
+parser.add_argument("--k", type=int, default=1, required=False, help="Number of points")
+parser.add_argument("--region_select", type=str, default='bbox', required=False, help="Region method")
+parser.add_argument("--dataset", type=str, default='floodseg', required=False, help="Train dataset")
+parser.add_argument("--exp_root", type=str, default='experiments', required=False, help="Path to experiments")
+parser.add_argument("--exist_ok", type=int, default=0, required=False, help="Overwrite existing save?")
+arguments = parser.parse_args()
 
+seed = arguments.seed
+k = arguments.k
+region_select = arguments.region_select
+dataset = arguments.dataset
+exp_root = arguments.exp_root
+exp_id = f'{dataset}_{region_select}_k{k}_{seed}'
+
+torch.manual_seed(seed)
+np.random.seed(seed)
+random.seed(seed)
+
+if not os.path.exists(os.path.join(exp_root, exp_id)):
+    os.mkdir(os.path.join(exp_root, exp_id))
+else:
+    if arguments.exist_ok == 0:
+        raise OSError("Path exists!")
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 processor = SamProcessor.from_pretrained('facebook/sam-vit-base')
 model = SamModel.from_pretrained('facebook/sam-vit-base')
 
-train_dataset = FloodSeg(root, os.path.join(root, 'train.csv'), processor, region_select='point', k=1)
-test_dataset = FloodSeg(root, os.path.join(root, 'test.csv'), processor, region_select='point', k=1)
+
+if dataset == 'floodseg':
+    root = '/home/WVU-AD/jdt0025/Documents/data/Flood'
+    train_dataset = FloodSeg(root, os.path.join(root, 'train.csv'), processor, region_select=region_select, k=k)
+    test_dataset = FloodSeg(root, os.path.join(root, 'test.csv'), processor, region_select=region_select, k=k)
+elif dataset == 'sen1flood11':
+    root = '/home/WVU-AD/jdt0025/Documents/data/v1.1/data/flood_events/HandLabeled'
+    train_dataset = Sen1Flood11(root, os.path.join(root, 'train_cleaner.csv'), processor, region_select=region_select, k=k)
+    test_dataset  = Sen1Flood11(root, os.path.join(root, 'test_cleaner.csv'), processor, region_select=region_select, k=k)
+    print('Train elements:', len(train_dataset))
+    print('Test elements :', len(test_dataset))
+
 train_dataloader = DataLoader(train_dataset, batch_size=4, shuffle=True)
 test_dataloader = DataLoader(test_dataset, batch_size=4, shuffle=False)
-
 
 # make sure we only compute gradients for mask decoder
 for name, param in model.named_parameters():
@@ -45,6 +79,10 @@ model.to(device)
 
 best_val_loss = float('inf')
 best_model_state = None
+metrics = {
+    'train_loss': [],
+    'valid_loss': []
+}
 for epoch in range(num_epochs):
     epoch_losses = []
     for batch in tqdm(train_dataloader):
@@ -69,6 +107,7 @@ for epoch in range(num_epochs):
 
     mean_train_loss = mean(epoch_losses)
     epoch_losses.append(mean_train_loss)
+    metrics['train_loss'].append(mean_train_loss)
 
     print(f'EPOCH: {epoch}')
     print(f'Mean loss: {mean(epoch_losses)}')
@@ -90,6 +129,7 @@ for epoch in range(num_epochs):
             val_losses.append(loss.item())
     mean_val_loss = mean(val_losses)
     val_losses.append(mean_val_loss)
+    metrics['valid_loss'].append(mean_val_loss)
 
     print(f'Validation loss: {mean(val_losses)}')
 
@@ -98,4 +138,10 @@ for epoch in range(num_epochs):
         best_val_loss = mean_val_loss
         best_model_state = model.state_dict()
         # Save the best model
-        torch.save(best_model_state, "experiments/best_model_SAM_1.pth")
+        torch.save(best_model_state, os.path.join(exp_root, exp_id, 'best_model.pth'))
+
+plt.figure()
+plt.plot(metrics['train_loss'], label='Train loss')
+plt.plot(metrics['valid_loss'], label='Valid loss')
+plt.legend()
+plt.savefig(os.path.join(exp_root, exp_id, 'losses.png'))

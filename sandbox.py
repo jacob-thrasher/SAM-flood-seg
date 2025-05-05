@@ -10,13 +10,45 @@ from transformers import SamProcessor, SamModel
 import matplotlib.pyplot as plt
 from matplotlib import patches
 import pandas as pd
+from tifffile import imread
 
 
 root = '/home/WVU-AD/jdt0025/Documents/data/v1.1/data/flood_events/HandLabeled'
+split = 'test'
+df = pd.read_csv(os.path.join(root, f'{split}_clean.csv'))
+
+# for i , row in df.iterrows():
+#     mask_path = os.path.join(root, 'LabelHand', row['masks'])
+#     mask = imread(mask_path)
+#     mask = np.maximum(0, mask)
+#     print(np.unique(mask))
+
+for i, row in df.iterrows():
+    # mask_path = os.path.join(root, 'LabelHand', row['masks'])
+    # mask = imread(mask_path)
+    # mask = np.maximum(0, mask)
+
+    # if len(np.unique(mask)) == 1:
+    #     print(np.unique(mask))
+    #     df.drop(index=i, inplace=True)
 
 
-# dataset = Sen1Flood11(root)
-# img, mask = dataset[4]
+    img_full = imread(os.path.join(root, 'S2Hand', row['images']))
+    img_rgb = np.stack([
+            img_full[3],
+            img_full[2],
+            img_full[1],
+        ])
+    
+    if np.max(img_rgb) == 0:
+        print('Dropping row', i)
+        df.drop(index=i, inplace=True)
+
+df.to_csv(os.path.join(root, f'{split}_cleaner.csv'))
+
+
+# dataset = Sen1Flood11(root, os.path.join(root, 'train.csv'), None, region_select='point', k=1)
+# img, mask = dataset[2]
 
 # print(img.shape)
 # print(mask.shape)

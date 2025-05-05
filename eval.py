@@ -13,7 +13,9 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import torchvision.transforms as T
 import monai
-from data import FloodSeg
+import random
+from data import FloodSeg, Sen1Flood11
+
 
 def get_metrics(model, dataloader):
 
@@ -38,9 +40,20 @@ def get_metrics(model, dataloader):
     print(f'Dice: {running_dice / len(dataloader)}')
 
 
+# Eval Config
+seed = 42
+pretrain_weights = 'experiments/best_model_SAM_1.pth'
+dataset = 'sen1flood11'
+k=1
+region_method = 'point' # bbox, point, each
 root = '/home/WVU-AD/jdt0025/Documents/data/Flood'
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+torch.manual_seed(seed)
+np.random.seed(seed)  
+random.seed(seed)
+
 
 # Load processor and model
 ## Processor preprocesses images in the way that SAM expects them to be
@@ -49,12 +62,19 @@ model = SamModel.from_pretrained('facebook/sam-vit-base')
 
 
 # Define dataloaders
-train_dataset = FloodSeg(root, os.path.join(root, 'train.csv'), processor, region_select='point', k=1)
-test_dataset = FloodSeg(root, os.path.join(root, 'test.csv'), processor, region_select='point', k=1)
-train_dataloader = DataLoader(train_dataset, batch_size=2, shuffle=True)
-test_dataloader = DataLoader(test_dataset, batch_size=2, shuffle=False)
+if dataset == 'floodseg':
+    root = '/home/WVU-AD/jdt0025/Documents/data/Flood'
+    train_dataset = FloodSeg(root, os.path.join(root, 'train.csv'), processor, region_select=region_method, k=k)
+    test_dataset = FloodSeg(root, os.path.join(root, 'test.csv'), processor, region_select=region_method, k=k)
+elif dataset == 'sen1flood11':
+    root = '/home/WVU-AD/jdt0025/Documents/data/v1.1/data/flood_events/HandLabeled'
+    train_dataset = Sen1Flood11(root, os.path.join(root, 'train_clean.csv'), processor, region_select=region_method, k=k)
+    test_dataset  = Sen1Flood11(root, os.path.join(root, 'test_clean.csv'), processor, region_select=region_method, k=k)
+train_dataloader = DataLoader(train_dataset, batch_size=2, shuffle=True, drop_last=True)
+test_dataloader = DataLoader(test_dataset, batch_size=2, shuffle=False, drop_last=True)
 
-model.load_state_dict(torch.load('experiments/best_model_SAM_1.pth', weights_only=True))
+if pretrain_weights:
+    model.load_state_dict(torch.load(pretrain_weights, weights_only=True))
 model.to('cuda')
 
 
@@ -69,8 +89,8 @@ pred = outputs.pred_masks.squeeze().detach().cpu()
 # Get segmentation mask for test imafge
 
 # Get test image and mask
-img = batch['pixel_values'][0].detach().cpu()
-mask = batch['ground_truth_mask'][0].detach().cpu()
+img = batch['pixel_values'][1].detach().cpu()
+mask = batch['ground_truth_mask'][1].detach().cpu()
 resize = T.Resize((256, 256))
 
 # Normalize image but I don't remember why lol
